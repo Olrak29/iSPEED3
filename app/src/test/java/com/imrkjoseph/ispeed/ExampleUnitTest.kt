@@ -1,4 +1,4 @@
-package com.imrkjoseph.ispeed
+package com.olrak.ispeed
 
 import org.junit.Test
 

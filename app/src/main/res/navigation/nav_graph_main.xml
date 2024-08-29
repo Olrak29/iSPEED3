@@ -8,7 +8,7 @@
 
     <fragment
         android:id="@+id/dashboardFragment"
-        android:name="com.imrkjoseph.ispeed.dashboard.DashboardFragment"
+        android:name="com.olrak.ispeed.dashboard.DashboardFragment"
         android:label="fragment_dashboard"
         tools:layout="@layout/fragment_dashboard" >
 
@@ -39,19 +39,19 @@
 
     <fragment
         android:id="@+id/automaticTrackFragment"
-        android:name="com.imrkjoseph.ispeed.dashboard.screens.automatic_track.AutomaticTrackFragment"
+        android:name="com.olrak.ispeed.dashboard.screens.automatic_track.AutomaticTrackFragment"
         android:label="fragment_geo_map"
         tools:layout="@layout/fragment_automatic_track" />
 
     <fragment
         android:id="@+id/speedTestFragment"
-        android:name="com.imrkjoseph.ispeed.dashboard.screens.speed_test.SpeedTestFragment"
+        android:name="com.olrak.ispeed.dashboard.screens.speed_test.SpeedTestFragment"
         android:label="fragment_speed_test"
         tools:layout="@layout/fragment_speed_test" />
 
     <fragment
         android:id="@+id/geoMapFragment"
-        android:name="com.imrkjoseph.ispeed.dashboard.screens.map.GeoMapFragment"
+        android:name="com.olrak.ispeed.dashboard.screens.map.GeoMapFragment"
         android:label="GeoMapFragment"
         tools:layout="@layout/fragment_geo_map" />
 </navigation>

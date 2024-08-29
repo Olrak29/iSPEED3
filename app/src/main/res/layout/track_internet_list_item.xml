@@ -8,7 +8,7 @@
     <data>
         <variable
             name="dto"
-            type="com.imrkjoseph.ispeed.app.shared.dto.ListItemViewDto" />
+            type="com.olrak.ispeed.app.shared.dto.ListItemViewDto" />
     </data>
 
     <LinearLayout

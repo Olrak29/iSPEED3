@@ -9,7 +9,7 @@
 
         <variable
             name="data"
-            type="com.imrkjoseph.ispeed.app.shared.widget.DialogFactory.ResultDialogAttributes"/>
+            type="com.olrak.ispeed.app.shared.widget.DialogFactory.ResultDialogAttributes"/>
     </data>
 
     <androidx.cardview.widget.CardView

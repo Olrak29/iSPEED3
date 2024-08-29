@@ -240,7 +240,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/header_details">
 
-            <com.imrkjoseph.ispeed.app.component.CustomRecyclerView
+            <com.olrak.ispeed.app.component.CustomRecyclerView
                 android:id="@+id/internet_status_list"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"

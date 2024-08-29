@@ -8,11 +8,11 @@ plugins {
 }
 
 android {
-    namespace = "com.imrkjoseph.ispeed"
+    namespace = "com.olrak.ispeed"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.imrkjoseph.ispeed"
+        applicationId = "com.olrak.ispeed"
         minSdk = 24
         targetSdk = 34
         versionCode = 1

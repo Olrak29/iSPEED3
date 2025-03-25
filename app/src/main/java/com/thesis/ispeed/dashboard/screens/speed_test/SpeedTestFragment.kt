@@ -1,11 +1,14 @@
 package com.thesis.ispeed.dashboard.screens.speed_test
 
 import android.R
+import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.location.Location
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
 import android.view.View
 import android.view.animation.Animation
@@ -511,31 +514,54 @@ class SpeedTestFragment : BaseFragment<FragmentSpeedTestBinding>(bindingInflater
         return 0
     }
 
-    private fun saveResults(view: View): File? {
+    private fun saveResults(view: View) {
         try {
-            val dirPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM).toString()
-            val path = (dirPath + "/" + "SCREEN" + System.currentTimeMillis() + ".png")
-            view.isDrawingCacheEnabled = true
-            view.isDrawingCacheEnabled = false
-            val imageFile = File(path)
-            val fileOutputStream = FileOutputStream(imageFile)
-
-            val quality = 100
-            getBitmapView(v = view)?.compress(Bitmap.CompressFormat.JPEG, quality, fileOutputStream)
-            try {
-                fileOutputStream.flush()
-                fileOutputStream.close()
-            } catch (e: IOException) {
-                e.printStackTrace()
-            }
-            showFancyToast("Check Exported Image on your gallery.")
-            return imageFile
+            getBitmapView(v = view)?.let(::saveBitmapToGallery)
         } catch (e: FileNotFoundException) {
             e.printStackTrace()
         } catch (e: IOException) {
             e.printStackTrace()
         }
-        return null
+    }
+
+    // ✅ Save the bitmap to gallery (works on all Android versions)
+    private fun saveBitmapToGallery(bitmap: Bitmap) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val contentValues = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, "Screen_Screenshot_${System.currentTimeMillis()}.jpg")
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Screenshots")
+            }
+
+            val contentResolver = requireContext().contentResolver
+            val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+
+            uri?.let {
+                try {
+                    contentResolver.openOutputStream(it)?.use { outputStream ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+                        showFancyToast("Screenshot saved to gallery.")
+                    }
+                } catch (e: IOException) {
+                    e.printStackTrace()
+                    showFancyToast("Error saving screenshot.")
+                }
+            } ?: showFancyToast("Failed to save screenshot.")
+        } else {
+            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Screenshots")
+            if (!dir.exists()) dir.mkdirs()
+
+            val file = File(dir, "Screen_Screenshot_${System.currentTimeMillis()}.jpg")
+            try {
+                FileOutputStream(file).use { outputStream ->
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+                }
+                showFancyToast("Screenshot saved to: ${file.absolutePath}")
+            } catch (e: IOException) {
+                e.printStackTrace()
+                showFancyToast("Error saving screenshot.")
+            }
+        }
     }
 
     private fun getBitmapView(v: View): Bitmap? {

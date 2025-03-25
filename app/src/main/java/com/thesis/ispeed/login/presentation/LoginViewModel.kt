@@ -18,7 +18,6 @@ import javax.inject.Inject
 class LoginViewModel @Inject constructor(
     private val loginUserCredentials: LoginUserCredentials,
     private val firebaseAuth: FirebaseAuth,
-    private val currentUser: FirebaseUser?,
     private val firebaseUseCase: FirebaseUseCase
 ) : ViewModel() {
 
@@ -34,7 +33,7 @@ class LoginViewModel @Inject constructor(
 
     private fun checkScreenState() {
         viewModelScope.launch {
-            alreadyLoggedIn.value = currentUser != null && currentUser.isEmailVerified
+            alreadyLoggedIn.value = firebaseAuth.currentUser != null && firebaseAuth.currentUser?.isEmailVerified == true
         }
     }
 

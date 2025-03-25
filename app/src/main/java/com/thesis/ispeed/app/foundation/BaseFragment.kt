@@ -8,6 +8,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.viewbinding.ViewBinding
+import com.thesis.ispeed.app.util.NavigationUtil
 import com.thesis.ispeed.app.util.SpeedTestHandler
 import com.thesis.ispeed.app.util.ViewUtil
 import javax.inject.Inject
@@ -21,6 +22,9 @@ abstract class BaseFragment<VB: ViewBinding>(
 
     @Inject
     lateinit var viewUtil: ViewUtil
+
+    @Inject
+    lateinit var navigationUtil: NavigationUtil
 
     private var _binding: VB? = null
 

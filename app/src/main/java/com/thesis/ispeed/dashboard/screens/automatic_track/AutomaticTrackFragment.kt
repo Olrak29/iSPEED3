@@ -1,19 +1,37 @@
 package com.thesis.ispeed.dashboard.screens.automatic_track
 
 import android.Manifest
+import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
+import android.content.Intent.CATEGORY_DEFAULT
+import android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+import android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+import android.content.Intent.FLAG_ACTIVITY_NO_HISTORY
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.location.Geocoder
+import android.location.Location
+import android.location.LocationManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Looper
+import android.provider.MediaStore
+import android.provider.Settings
+import android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+import android.util.Log
 import android.util.LruCache
 import android.view.View
+import androidx.annotation.NonNull
+import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.core.content.PermissionChecker.checkSelfPermission
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
@@ -27,7 +45,11 @@ import com.github.mikephil.charting.data.BarEntry
 import com.github.mikephil.charting.formatter.IAxisValueFormatter
 import com.google.android.gms.common.api.GoogleApiClient
 import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.LocationSettingsRequest
 import com.thesis.ispeed.R
 import com.thesis.ispeed.app.component.CustomRecyclerView
 import com.thesis.ispeed.app.foundation.BaseFragment
@@ -58,12 +80,13 @@ import java.io.IOException
 import java.util.Calendar
 import java.util.Locale
 
+
 @AndroidEntryPoint
 class AutomaticTrackFragment : BaseFragment<FragmentAutomaticTrackBinding>(bindingInflater = FragmentAutomaticTrackBinding::inflate) {
 
-    private var latitude: Double? = null
+    private var latitude: Double = 0.0
 
-    private var longitude: Double? = null
+    private var longitude: Double = 0.0
 
     private var currentLocation: String? = null
 
@@ -73,8 +96,6 @@ class AutomaticTrackFragment : BaseFragment<FragmentAutomaticTrackBinding>(bindi
 
     private val REQUEST_MEDIA = 2
 
-    private var fusedLocationClient: FusedLocationProviderClient? = null
-
     private var trackList: MutableList<TrackInternetModel>? = ArrayList()
 
     private val viewModel: AutomaticTrackViewModel by viewModels()
@@ -83,11 +104,16 @@ class AutomaticTrackFragment : BaseFragment<FragmentAutomaticTrackBinding>(bindi
 
     private var isWeekly = true
 
+    private val calendar: Calendar = Calendar.getInstance()
+
+    private var currentWeek = calendar.get(Calendar.WEEK_OF_MONTH)
+
+    private val REQUEST_FOREGROUND_SERVICE_PERMISSION = 1001
+
     override fun onViewCreated() {
         super.onViewCreated()
         with(binding) {
             setupGoogleClient()
-            setupObserveLocation()
             setupComponents()
             setupObserver()
             checkLocationPermission()
@@ -119,22 +145,119 @@ class AutomaticTrackFragment : BaseFragment<FragmentAutomaticTrackBinding>(bindi
             }
         }
 
+        previousWeek.setOnClickListener {
+            buildGraphChart(trackList, weekNumber = getWeekNumber(WeekState.PREVIOUS_WEEK))
+        }
+
+        nextWeek.setOnClickListener {
+            buildGraphChart(trackList, weekNumber = getWeekNumber(WeekState.NEXT_WEEK))
+        }
+
         internetStatusList.setupList()
         setupLabels()
     }
 
+    private fun requestForegroundServicePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) { // Android 14+
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.FOREGROUND_SERVICE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+
+                requestPermissions(
+                    arrayOf(Manifest.permission.FOREGROUND_SERVICE_LOCATION),
+                    REQUEST_FOREGROUND_SERVICE_PERMISSION
+                )
+            } else {
+                // Permission already granted, start the service
+                startBackgroundTracking()
+            }
+        } else {
+            // For Android 13 and below, start service directly
+            startBackgroundTracking()
+        }
+    }
+
+    private fun getWeekNumber(weekState: WeekState): Int {
+        if (weekState == WeekState.PREVIOUS_WEEK) {
+            currentWeek--
+        } else {
+            if (currentWeek != 5) {
+                currentWeek++
+            }
+        }
+
+        return currentWeek
+    }
+
+    enum class WeekState {
+        PREVIOUS_WEEK,
+        NEXT_WEEK,
+        DEFAULT
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        @NonNull permissions: Array<String>,
+        @NonNull grantResults: IntArray
+    ) {
+        if (requestCode == REQUEST_FOREGROUND_SERVICE_PERMISSION) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Permission granted, start foreground service
+                startBackgroundTracking()
+            }
+        } else if (requestCode == REQUEST_LOCATION) {
+            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                startLocationUpdates()
+            } else {
+                showPermissionAlertDialog()
+            }
+        }
+    }
+
+    private fun showPermissionAlertDialog() {
+        val builder = AlertDialog.Builder(requireContext())
+        builder.setMessage("Location permission is denied, we need to access the location to get your address, do you want to turn it on?")
+            .setCancelable(false)
+            .setPositiveButton("Yes") { _, _ ->
+                val intent = Intent(ACTION_APPLICATION_DETAILS_SETTINGS)
+                with(intent) {
+                    data = Uri.fromParts("package", requireContext().packageName, null)
+                    addCategory(CATEGORY_DEFAULT)
+                    addFlags(FLAG_ACTIVITY_NEW_TASK)
+                    addFlags(FLAG_ACTIVITY_NO_HISTORY)
+                    addFlags(FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                }
+                startActivity(intent)
+            }
+            .setNegativeButton("No") { dialog, _ ->
+                dialog.cancel()
+                showPermissionAlertDialog()
+            }
+        val alert: AlertDialog = builder.create()
+        alert.setCancelable(false)
+        alert.setCanceledOnTouchOutside(false)
+        alert.show()
+    }
+
     private fun checkLocationPermission() {
+        fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(requireContext())
+        mLocationRequest = LocationRequest.create()
+
+        val locationManager = requireContext().getSystemService(Context.LOCATION_SERVICE) as LocationManager
+
         if (ActivityCompat.checkSelfPermission(
                 requireContext(), Manifest.permission.ACCESS_FINE_LOCATION
             ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
                 requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            ActivityCompat.requestPermissions(
-                getAppActivity(),
+            requestPermissions(
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
                 REQUEST_LOCATION
             )
+        } else if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            showAlertMessage()
+        } else {
+            startLocationUpdates()
         }
     }
 
@@ -151,9 +274,17 @@ class AutomaticTrackFragment : BaseFragment<FragmentAutomaticTrackBinding>(bindi
             if (isWeekly) {
                 today.setBackgroundResource(0)
                 weekly.setBackgroundResource(R.drawable.rounded_outline_background)
+
+                previousWeek.setVisible(canShow = true)
+                nextWeek.setVisible(canShow = true)
+                weeklyDate.setVisible(canShow = true)
             } else {
                 today.setBackgroundResource(R.drawable.rounded_outline_background)
                 weekly.setBackgroundResource(0)
+
+                previousWeek.setVisible(canShow = false)
+                nextWeek.setVisible(canShow = false)
+                weeklyDate.setVisible(canShow = false)
             }
         }
     }
@@ -198,85 +329,97 @@ class AutomaticTrackFragment : BaseFragment<FragmentAutomaticTrackBinding>(bindi
                 // Increment the ITEM COUNT to 10 for pagination.
                 ITEM_COUNT += 10
 
-                viewLifecycleOwner.lifecycleScope.launch {
-                    launch(Dispatchers.Main) {
-                        binding.loadingWidget.root.setVisible(canShow = true)
-                    }
+                if ((trackList?.size ?: 0) < (viewModel.totalCount.value ?: 0)) {
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        launch(Dispatchers.Main) {
+                            binding.loadingWidget.root.setVisible(canShow = true)
+                        }
 
-                    viewModel.getTrackInternetList(count = ITEM_COUNT)
+                        viewModel.getTrackInternetList(count = ITEM_COUNT)
+                    }
                 }
             }
         })
     }
 
-    private fun buildGraphChart(trackList: MutableList<TrackInternetModel>?) {
+    private fun buildGraphChart(
+        trackList: MutableList<TrackInternetModel>?,
+        weekNumber: Int = currentWeek
+    ) {
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
             with(binding.barChart) {
                 trackList?.let {
                     val barEntries = ArrayList<BarEntry>()
 
+                    val weekFirstDay = viewUtil.parseWeekDate(viewUtil.getWeeklyDate(weekNumber)[0])
+                    val weekLastDay = viewUtil.parseWeekDate(viewUtil.getWeeklyDate(
+                        weekNumber
+                    )[6])
+
+                    binding.weeklyDate.text = "Weekly Range: ($weekFirstDay - $weekLastDay)"
+
                     if (isWeekly) {
                         val mondayStable = trackList.filter {
                             it.trackStatus == TrackInternetModel.TrackStatusEnum.CONNECTED.status
-                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate()[0]
+                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate(weekNumber)[0]
                         }
                         val mondayUnstable = trackList.filter {
                             it.trackStatus == TrackInternetModel.TrackStatusEnum.DISCONNECTED.status
-                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate()[0]
+                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate(weekNumber)[0]
                         }
 
                         val tuesdayStable = trackList.filter {
                             it.trackStatus == TrackInternetModel.TrackStatusEnum.CONNECTED.status
-                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate()[1]
+                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate(weekNumber)[1]
                         }
                         val tuesdayUnstable = trackList.filter {
                             it.trackStatus == TrackInternetModel.TrackStatusEnum.DISCONNECTED.status
-                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate()[1]
+                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate(weekNumber)[1]
                         }
 
                         val wednesdayStable = trackList.filter {
                             it.trackStatus == TrackInternetModel.TrackStatusEnum.CONNECTED.status
-                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate()[2]
+                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate(weekNumber)[2]
                         }
                         val wednesdayUnstable = trackList.filter {
                             it.trackStatus == TrackInternetModel.TrackStatusEnum.DISCONNECTED.status
-                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate()[2]
+                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate(weekNumber)[2]
                         }
 
                         val thursdayStable = trackList.filter {
                             it.trackStatus == TrackInternetModel.TrackStatusEnum.CONNECTED.status
-                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate()[3]
+                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate(weekNumber)[3]
                         }
                         val thursdayUnstable = trackList.filter {
                             it.trackStatus == TrackInternetModel.TrackStatusEnum.DISCONNECTED.status
-                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate()[3]
+                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate(weekNumber)[3]
                         }
 
                         val fridayStable = trackList.filter {
                             it.trackStatus == TrackInternetModel.TrackStatusEnum.CONNECTED.status
-                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate()[4]
+                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate(weekNumber)[4]
                         }
                         val fridayUnstable = trackList.filter {
                             it.trackStatus == TrackInternetModel.TrackStatusEnum.DISCONNECTED.status
-                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate()[4]
+                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate(weekNumber)[4]
                         }
 
                         val saturdayStable = trackList.filter {
                             it.trackStatus == TrackInternetModel.TrackStatusEnum.CONNECTED.status
-                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate()[5]
+                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate(weekNumber)[5]
                         }
                         val saturdayUnstable = trackList.filter {
                             it.trackStatus == TrackInternetModel.TrackStatusEnum.DISCONNECTED.status
-                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate()[5]
+                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate(weekNumber)[5]
                         }
 
                         val sundayStable = trackList.filter {
                             it.trackStatus == TrackInternetModel.TrackStatusEnum.CONNECTED.status
-                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate()[6]
+                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate(weekNumber)[6]
                         }
                         val sundayUnstable = trackList.filter {
                             it.trackStatus == TrackInternetModel.TrackStatusEnum.DISCONNECTED.status
-                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate()[6]
+                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate(weekNumber)[6]
                         }
 
                         barEntries.add(BarEntry(0F, floatArrayOf(mondayStable.size.toFloat(), mondayUnstable.size.toFloat())))
@@ -300,12 +443,12 @@ class AutomaticTrackFragment : BaseFragment<FragmentAutomaticTrackBinding>(bindi
 
                         val todayStable = trackList.filter {
                             it.trackStatus == TrackInternetModel.TrackStatusEnum.CONNECTED.status
-                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate()[dayPosition]
+                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate(weekNumber)[dayPosition]
                         }
 
                         val todayUnstable = trackList.filter {
                             it.trackStatus == TrackInternetModel.TrackStatusEnum.DISCONNECTED.status
-                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate()[dayPosition]
+                                    && viewUtil.parseDateToString(it.trackDate) == viewUtil.getWeeklyDate(weekNumber)[dayPosition]
                         }
 
                         barEntries.add(BarEntry(dayPosition.toFloat(), floatArrayOf(todayStable.size.toFloat(), todayUnstable.size.toFloat())))
@@ -399,44 +542,94 @@ class AutomaticTrackFragment : BaseFragment<FragmentAutomaticTrackBinding>(bindi
         }
     }
 
-    private fun setupObserveLocation() {
-        if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-            && ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
-        ) {
+    private var fusedLocationProviderClient: FusedLocationProviderClient? = null
+    private val interval: Long = 10000 // 10seconds
+    private val fastestInterval: Long = 5000 // 5 seconds
+    private lateinit var mLastLocation: Location
+    private lateinit var mLocationRequest: LocationRequest
+
+    override fun onPause() {
+        super.onPause()
+        fusedLocationProviderClient?.removeLocationUpdates(mLocationCallback)
+    }
+
+    private fun startLocationUpdates() {
+        mLocationRequest.priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+        mLocationRequest.interval = interval
+        mLocationRequest.fastestInterval = fastestInterval
+
+        val builder = LocationSettingsRequest.Builder()
+        builder.addLocationRequest(mLocationRequest)
+        val locationSettingsRequest = builder.build()
+        val settingsClient = LocationServices.getSettingsClient(requireContext())
+        settingsClient.checkLocationSettings(locationSettingsRequest)
+
+        fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(requireContext())
+
+        if (ActivityCompat.checkSelfPermission(
+                requireContext(), Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED) {
             return
         }
 
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireContext())
-        fusedLocationClient?.lastLocation?.addOnSuccessListener {  location ->
-            // Get last known location. In some rare situations this can be null.
-            if (location != null) {
-                try {
-                    if (ActivityCompat.checkSelfPermission(
-                           requireContext(), Manifest.permission.ACCESS_FINE_LOCATION
-                        ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
-                            requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION
-                        ) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        ActivityCompat.requestPermissions(
-                            getAppActivity(),
-                            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
-                            REQUEST_LOCATION
-                        )
-                    } else {
-                        latitude = location.latitude
-                        longitude = location.longitude
-                        getCityName(latitude, longitude)
-                    }
-                } catch (e: IOException) {
-                    e.printStackTrace()
-                }
+        try {
+            fusedLocationProviderClient?.requestLocationUpdates(
+                mLocationRequest,
+                mLocationCallback,
+                Looper.myLooper()!!
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
-                // Internet automatically starts, when this screen is open.
-                if (requireContext().isServiceRunning(TrackingService::class.java).not()) {
-                    startBackgroundTracking()
-                }
+    private val mLocationCallback = object : LocationCallback() {
+        override fun onLocationResult(locationResult: LocationResult) {
+            locationResult.lastLocation
+            locationChanged(locationResult.lastLocation)
+            latitude = locationResult.lastLocation.latitude
+            longitude = locationResult.lastLocation.longitude
+
+            // Internet automatically starts, when this screen is open.
+            if (requireContext().isServiceRunning(TrackingService::class.java).not()) {
+                // Request foreground service permission before starting service
+                requestForegroundServicePermission()
             }
         }
+    }
+
+    fun locationChanged(location: Location) {
+        mLastLocation = location
+        longitude = mLastLocation.longitude
+        latitude = mLastLocation.latitude
+
+        // Get last known location. In some rare situations this can be null.
+        try {
+            latitude = location.latitude
+            longitude = location.longitude
+            getCityName(latitude, longitude)
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun showAlertMessage() {
+        val builder = AlertDialog.Builder(requireContext())
+        builder.setMessage("Location is disabled, we need to turn on the location to get your address, do you want to turn it on?")
+            .setCancelable(false)
+            .setPositiveButton("Yes") { _, _ ->
+                startActivityForResult(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS),10)
+            }
+            .setNegativeButton("No") { dialog, _ ->
+                dialog.cancel()
+                showAlertMessage()
+            }
+        val alert: AlertDialog = builder.create()
+        alert.setCancelable(false)
+        alert.setCanceledOnTouchOutside(false)
+        alert.show()
     }
 
     private fun getCityName(lat: Double?,long: Double?) {
@@ -466,6 +659,7 @@ class AutomaticTrackFragment : BaseFragment<FragmentAutomaticTrackBinding>(bindi
                 }
             }
             currentLocation = result
+            binding.locationName.text = "Location: $currentLocation"
         }
     }
 
@@ -522,7 +716,7 @@ class AutomaticTrackFragment : BaseFragment<FragmentAutomaticTrackBinding>(bindi
         }
     }
 
-    private fun captureScreen(): File? {
+    private fun captureScreen() {
         // This is only necessary for API level >= 33 (TIRAMISU)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
@@ -531,7 +725,7 @@ class AutomaticTrackFragment : BaseFragment<FragmentAutomaticTrackBinding>(bindi
                     arrayOf(Manifest.permission.READ_MEDIA_IMAGES),
                     REQUEST_MEDIA
                 )
-                return null
+                return
             }
         } else {
             if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
@@ -542,31 +736,59 @@ class AutomaticTrackFragment : BaseFragment<FragmentAutomaticTrackBinding>(bindi
                     arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE),
                     REQUEST_MEDIA
                 )
-                return null
+                return
             }
         }
 
         try {
-            val dirPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM).toString()
-            val path = dirPath + "/" + "SCREEN" + System.currentTimeMillis() + ".png"
             val bitmap: Bitmap? = getScreenshotFromRecyclerView(binding.internetStatusList)
-            val imageFile = File(path)
-            val fileOutputStream = FileOutputStream(imageFile)
-            val quality = 100
-            bitmap!!.compress(Bitmap.CompressFormat.JPEG, quality, fileOutputStream)
-            fileOutputStream.flush()
-            fileOutputStream.close()
-            showFancyToast(message = "Check Exported Image on your gallery.")
-            return imageFile
+            bitmap?.let { saveBitmapToGallery(bitmap) }
         } catch (e: FileNotFoundException) {
             e.printStackTrace()
         } catch (e: IOException) {
             e.printStackTrace()
-
         }
-        return null
     }
 
+    // ✅ Save the bitmap to gallery (works on all Android versions)
+    private fun saveBitmapToGallery(bitmap: Bitmap) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val contentValues = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, "Screen_Screenshot_${System.currentTimeMillis()}.jpg")
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Screenshots")
+            }
+
+            val contentResolver = requireContext().contentResolver
+            val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+
+            uri?.let {
+                try {
+                    contentResolver.openOutputStream(it)?.use { outputStream ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+                        showFancyToast("Screenshot saved to gallery.")
+                    }
+                } catch (e: IOException) {
+                    e.printStackTrace()
+                    showFancyToast("Error saving screenshot.")
+                }
+            } ?: showFancyToast("Failed to save screenshot.")
+        } else {
+            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Screenshots")
+            if (!dir.exists()) dir.mkdirs()
+
+            val file = File(dir, "Screen_Screenshot_${System.currentTimeMillis()}.jpg")
+            try {
+                FileOutputStream(file).use { outputStream ->
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+                }
+                showFancyToast("Screenshot saved to: ${file.absolutePath}")
+            } catch (e: IOException) {
+                e.printStackTrace()
+                showFancyToast("Error saving screenshot.")
+            }
+        }
+    }
 
     private fun getScreenshotFromRecyclerView(view: RecyclerView): Bitmap? {
         val adapter = view.adapter

@@ -4,7 +4,7 @@ plugins {
     id("com.google.gms.google-services")
     id("androidx.navigation.safeargs.kotlin")
     id("com.google.dagger.hilt.android")
-    kotlin("kapt")
+    id("org.jetbrains.kotlin.kapt")
 }
 
 android {
@@ -75,9 +75,7 @@ dependencies {
     kapt("com.google.dagger:hilt-android-compiler:2.48")
 
     // Mapbox
-    implementation("com.mapbox.mapboxsdk:mapbox-android-sdk:9.0.1")
-    implementation("com.mapbox.mapboxsdk:mapbox-android-plugin-annotation-v9:0.9.0")
-    implementation("com.google.android.libraries.maps:maps:3.1.0-beta")
+    implementation("com.mapbox.maps:android:11.10.3")
 
     // Chart
     implementation("com.github.PhilJay:MPAndroidChart:v3.0.3")
@@ -104,10 +102,14 @@ dependencies {
     // Circular ImageView
     implementation("de.hdodenhof:circleimageview:3.1.0")
 
+    implementation("com.android.volley:volley:1.2.1")
+
     // Speed Test
     androidTestImplementation("com.android.support.test.espresso:espresso-core:2.2.2") {
         exclude(group = "com.android.support", module = "support-annotations")
     }
+
+    implementation("com.google.android.gms:play-services-location:19.0.1")
 
     // Event Bus
     implementation("org.greenrobot:eventbus:3.3.1")

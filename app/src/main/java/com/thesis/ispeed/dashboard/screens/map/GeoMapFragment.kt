@@ -1,14 +1,32 @@
 package com.thesis.ispeed.dashboard.screens.map
 
+import LocationUpdatesHelper
 import android.Manifest
+import android.content.ContentValues
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.drawable.Drawable
 import android.location.Geocoder
 import android.location.Location
+import android.media.MediaScannerConnection
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.provider.MediaStore
+import android.provider.Settings
+import android.view.PixelCopy
 import android.view.View
+import android.view.Window
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
@@ -16,6 +34,18 @@ import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.api.GoogleApiClient
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import com.mapbox.android.core.permissions.PermissionsManager
+import com.mapbox.common.MapboxOptions
+import com.mapbox.geojson.Point
+import com.mapbox.maps.CameraOptions
+import com.mapbox.maps.MapView
+import com.mapbox.maps.Style
+import com.mapbox.maps.plugin.annotation.annotations
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
+import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
+import com.shashank.sony.fancytoastlib.FancyToast
 import com.thesis.ispeed.R
 import com.thesis.ispeed.app.foundation.BaseFragment
 import com.thesis.ispeed.app.shared.extension.showFancyToast
@@ -28,18 +58,6 @@ import com.thesis.ispeed.app.util.PingTest
 import com.thesis.ispeed.app.util.SpeedTestHandler
 import com.thesis.ispeed.databinding.FragmentGeoMapBinding
 import com.thesis.ispeed.databinding.WidgetScreenToolbarBinding
-import com.mapbox.android.core.permissions.PermissionsListener
-import com.mapbox.android.core.permissions.PermissionsManager
-import com.mapbox.mapboxsdk.Mapbox
-import com.mapbox.mapboxsdk.camera.CameraPosition
-import com.mapbox.mapboxsdk.geometry.LatLng
-import com.mapbox.mapboxsdk.location.LocationComponent
-import com.mapbox.mapboxsdk.location.LocationComponentActivationOptions
-import com.mapbox.mapboxsdk.location.modes.CameraMode
-import com.mapbox.mapboxsdk.location.modes.RenderMode
-import com.mapbox.mapboxsdk.maps.MapboxMap
-import com.mapbox.mapboxsdk.maps.OnMapReadyCallback
-import com.mapbox.mapboxsdk.maps.Style
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -47,28 +65,28 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.OutputStream
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 @AndroidEntryPoint
-class GeoMapFragment : BaseFragment<FragmentGeoMapBinding>(bindingInflater = FragmentGeoMapBinding::inflate),
-    OnMapReadyCallback, PermissionsListener {
+class GeoMapFragment : BaseFragment<FragmentGeoMapBinding>(bindingInflater = FragmentGeoMapBinding::inflate) {
+
+    private var locationMarker: PointAnnotation? = null
+
+    private lateinit var annotationManager: PointAnnotationManager
 
     private var googleApiClient: GoogleApiClient? = null
 
     private var fusedLocationClient: FusedLocationProviderClient? = null
 
+    private lateinit var locationUpdatesHelper: LocationUpdatesHelper
+
     private var currentLocForSavingData: String? = null
 
-    private var mapboxMap: MapboxMap? = null
-
-    private var locationComponent: LocationComponent? = null
-
-    private var currentLocation: Location? = null
-
-    private var initialPosition: CameraPosition? = null
+    private var mapView: MapView? = null
 
     private var permissionsManager: PermissionsManager? = null
 
@@ -84,7 +102,7 @@ class GeoMapFragment : BaseFragment<FragmentGeoMapBinding>(bindingInflater = Fra
 
     override fun onCreated(savedInstanceState: Bundle?) {
         super.onCreated(savedInstanceState)
-        Mapbox.getInstance(requireContext(), getString(R.string.mapbox_maps_api_key))
+        MapboxOptions.accessToken = context?.getString(R.string.mapbox_maps_api_key).orEmpty()
     }
 
     override fun onViewCreated() {
@@ -97,6 +115,31 @@ class GeoMapFragment : BaseFragment<FragmentGeoMapBinding>(bindingInflater = Fra
         }
     }
 
+    private fun showPermissionAlertDialog() {
+        val builder = AlertDialog.Builder(requireContext())
+        builder.setMessage("Location permission is denied, we need to access the location to get your address, do you want to turn it on?")
+            .setCancelable(false)
+            .setPositiveButton("Yes") { _, _ ->
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                with(intent) {
+                    data = Uri.fromParts("package", requireContext().packageName, null)
+                    addCategory(Intent.CATEGORY_DEFAULT)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY)
+                    addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                }
+                startActivity(intent)
+            }
+            .setNegativeButton("No") { dialog, _ ->
+                dialog.cancel()
+                showPermissionAlertDialog()
+            }
+        val alert: AlertDialog = builder.create()
+        alert.setCancelable(false)
+        alert.setCanceledOnTouchOutside(false)
+        alert.show()
+    }
+
     private fun setupObserver() {
         with(viewModel) {
             userDetails.observe(viewLifecycleOwner) { details ->
@@ -106,17 +149,24 @@ class GeoMapFragment : BaseFragment<FragmentGeoMapBinding>(bindingInflater = Fra
     }
 
     private fun FragmentGeoMapBinding.setupComponents() {
-        mapView.getMapAsync(this@GeoMapFragment)
         tempBlackList = HashSet()
-
         toolBar.setupToolbar()
+        this@GeoMapFragment.mapView = mapView
+        val mapboxMap = mapView.getMapboxMap()
+
+        // Load map style with a callback
+        mapboxMap.loadStyleUri(Style.MAPBOX_STREETS) { style ->
+            checkAndRequestPermissions()
+        }
 
         myLocationButton.setOnClickListener {
             // Check to ensure coordinates aren't null, probably a better way of doing this...
-            if (mapboxMap?.locationComponent != null) {
-                enableLocationComponent(mapboxMap?.style)
-                locationComponent?.zoomWhileTracking(14.0)
-            }
+            enableLocationComponent()
+            mapView.getMapboxMap().setCamera(
+                CameraOptions.Builder()
+                    .zoom(14.0) // 👈 Set zoom level
+                    .build()
+            )
         }
 
         btnMeasureNow.setOnClickListener {
@@ -126,16 +176,40 @@ class GeoMapFragment : BaseFragment<FragmentGeoMapBinding>(bindingInflater = Fra
                     requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
-                ActivityCompat.requestPermissions(
-                    getAppActivity(),
-                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
-                    REQUEST_LOCATION
-                )
-
+                checkAndRequestPermissions()
                 return@setOnClickListener
             }
 
             measureSpeedTest()
+        }
+    }
+
+    private val locationPermissionRequest =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+            val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+
+            if (coarseGranted || fineGranted) {
+                enableLocationComponent()
+            } else {
+                showPermissionAlertDialog()
+            }
+        }
+
+    private fun checkAndRequestPermissions() {
+        if (ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            enableLocationComponent()
+        } else {
+            locationPermissionRequest.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
         }
     }
 
@@ -420,7 +494,7 @@ class GeoMapFragment : BaseFragment<FragmentGeoMapBinding>(bindingInflater = Fra
                         btnMeasureNow.textSize = 16f
                         btnMeasureNow.text = "Measure Now"
 
-                        captureMapScreen(parentLayout.rootView)
+                        checkGalleryPermission()
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -429,32 +503,118 @@ class GeoMapFragment : BaseFragment<FragmentGeoMapBinding>(bindingInflater = Fra
         }
     }
 
-    private fun captureMapScreen(view: View): File? {
-        try {
-            val dirPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM).toString()
-            val path = (dirPath + "/" + "SCREEN" + System.currentTimeMillis() + ".png")
-            view.isDrawingCacheEnabled = true
-            view.isDrawingCacheEnabled = false
-            val imageFile = File(path)
-            val fileOutputStream = FileOutputStream(imageFile)
-            mapboxMap?.snapshot { bitmap: Bitmap ->
-                val quality = 100
-                bitmap.compress(Bitmap.CompressFormat.JPEG, quality, fileOutputStream)
+    private val galleryPermissionRequest =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            if (isGranted) {
+                captureMapbox(binding.mapView) { mapBitmap ->
+                    if (mapBitmap != null) {
+                        mergeBitmaps(binding.mapView, binding.parentLayout, mapBitmap) { finalBitmap ->
+                            saveBitmapToGallery(finalBitmap)
+                        }
+                    }
+                }
+            } else {
+                showFancyToast(
+                    "Gallery Permission Denied, We need to access your gallery to be able to save the result photo.",
+                    FancyToast.INFO,
+                    FancyToast.LENGTH_LONG
+                )
+            }
+        }
+
+    private fun checkGalleryPermission() {
+        val galleryPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_IMAGES
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+
+        val isGranted = ContextCompat.checkSelfPermission(
+            requireContext(), galleryPermission
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (isGranted) {
+            captureMapbox(binding.mapView) { mapBitmap ->
+                if (mapBitmap != null) {
+                    mergeBitmaps(binding.mapView, binding.parentLayout, mapBitmap) { finalBitmap ->
+                        saveBitmapToGallery(finalBitmap)
+                    }
+                }
+            }
+        } else {
+            galleryPermissionRequest.launch(galleryPermission)
+        }
+    }
+
+    private fun captureLayout(view: View): Bitmap {
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        view.draw(canvas)
+        return bitmap
+    }
+
+    private fun captureMapbox(mapView: MapView, callback: (Bitmap?) -> Unit) {
+        mapView.snapshot { mapBitmap ->
+            callback(mapBitmap)
+        }
+    }
+
+    private fun mergeBitmaps(mapView: MapView, rootView: View, mapBitmap: Bitmap, callback: (Bitmap) -> Unit) {
+        val screenBitmap = captureLayout(rootView)
+
+        val finalBitmap = Bitmap.createBitmap(screenBitmap.width, screenBitmap.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(finalBitmap)
+
+        // Draw UI first (without Mapbox)
+        canvas.drawBitmap(screenBitmap, 0f, 0f, null)
+
+        // Get MapView position
+        val mapLeft = mapView.left.toFloat()
+        val mapTop = mapView.top.toFloat()
+
+        // Draw Mapbox at the correct position
+        canvas.drawBitmap(mapBitmap, mapLeft, mapTop, null)
+
+        callback(finalBitmap)
+    }
+
+    private fun saveBitmapToGallery(bitmap: Bitmap) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val contentValues = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, "Screen_Screenshot_${System.currentTimeMillis()}.jpg")
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Screenshots")
+            }
+
+            val contentResolver = requireContext().contentResolver
+            val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+
+            uri?.let {
                 try {
-                    fileOutputStream.flush()
-                    fileOutputStream.close()
+                    contentResolver.openOutputStream(it)?.use { outputStream ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+                        showFancyToast("Screenshot saved to gallery.")
+                    }
                 } catch (e: IOException) {
                     e.printStackTrace()
+                    showFancyToast("Error saving screenshot.")
                 }
-                showFancyToast("Check Exported Image on your gallery.")
+            } ?: showFancyToast("Failed to save screenshot.")
+        } else {
+            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Screenshots")
+            if (!dir.exists()) dir.mkdirs()
+
+            val file = File(dir, "Screen_Screenshot_${System.currentTimeMillis()}.jpg")
+            try {
+                FileOutputStream(file).use { outputStream ->
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+                }
+                showFancyToast("Screenshot saved to: ${file.absolutePath}")
+            } catch (e: IOException) {
+                e.printStackTrace()
+                showFancyToast("Error saving screenshot.")
             }
-            return imageFile
-        } catch (e: FileNotFoundException) {
-            e.printStackTrace()
-        } catch (e: IOException) {
-            e.printStackTrace()
         }
-        return null
     }
 
     private fun getPositionByRate(rate: Double): Int {
@@ -524,7 +684,6 @@ class GeoMapFragment : BaseFragment<FragmentGeoMapBinding>(bindingInflater = Fra
 
     override fun onResume() {
         super.onResume()
-        binding.mapView.onResume()
         speedTestHandler = SpeedTestHandler()
         speedTestHandler.start()
 
@@ -535,89 +694,84 @@ class GeoMapFragment : BaseFragment<FragmentGeoMapBinding>(bindingInflater = Fra
         )
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            locationUpdatesHelper.stopLocationUpdates()
+        } catch (e: Exception) { }
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
-        permissions: Array<String?>,
+        permissions: Array<String>,
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         permissionsManager!!.onRequestPermissionsResult(requestCode, permissions, grantResults)
-    }
 
-    override fun onMapReady(mapboxMap: MapboxMap) {
-        this.mapboxMap = mapboxMap
-        this.mapboxMap?.setStyle(Style.MAPBOX_STREETS) { style: Style ->
-            enableLocationComponent(loadedMapStyle = style)
-        }
-    }
-
-    override fun onExplanationNeeded(permissionsToExplain: MutableList<String>?) {
-        showFancyToast(getString(R.string.user_location_permission_explanation))
-    }
-
-    override fun onPermissionResult(granted: Boolean) {
-        if (granted) {
-            mapboxMap?.getStyle { style: Style? ->
-                enableLocationComponent(style)
+        if (requestCode == REQUEST_LOCATION) {
+            if (grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                showPermissionAlertDialog()
             }
-        } else {
-            showFancyToast(getString(R.string.user_location_permission_not_granted))
-            findNavController().popBackStack()
         }
     }
 
-    private fun enableLocationComponent(loadedMapStyle: Style?) {
-        // Check if permissions are enabled and if not request
-        if (PermissionsManager.areLocationPermissionsGranted(requireContext())) {
-            loadedMapStyle?.let { style ->
-                // Get an instance of the component
-                locationComponent = mapboxMap?.locationComponent
-                locationComponent?.activateLocationComponent(requireContext(), style)
-                if (ActivityCompat.checkSelfPermission(
-                        requireContext(),
-                        Manifest.permission.ACCESS_FINE_LOCATION
-                    ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
-                        requireContext(),
-                        Manifest.permission.ACCESS_COARSE_LOCATION
-                    ) != PackageManager.PERMISSION_GRANTED
-                ) {
-                    return
-                }
+    private fun enableLocationComponent() {
+        locationUpdatesHelper = LocationUpdatesHelper(requireContext()) { location ->
+            val point = Point.fromLngLat(location.longitude, location.latitude)
 
-                locationComponent?.isLocationComponentEnabled = true
-                // Set the component's camera mode
-                locationComponent?.cameraMode = CameraMode.TRACKING
-                locationComponent?.renderMode = RenderMode.COMPASS
-                locationComponent?.zoomWhileTracking(14.0)
-                val lastKnownLocation: Location? = locationComponent?.lastKnownLocation
-                if (lastKnownLocation != null) {
-                    currentLocation = lastKnownLocation
-                    initialPosition = CameraPosition.Builder()
-                    .target(LatLng(currentLocation!!.latitude, currentLocation!!.longitude))
-                    .zoom(15.0)
+            // Move Camera to New Location
+            mapView?.mapboxMap?.setCamera(
+                CameraOptions.Builder()
+                    .center(point)
+                    .zoom(14.0)
                     .build()
-                }
+            )
 
-                // Activate with options
-                locationComponent?.activateLocationComponent(
-                    LocationComponentActivationOptions.builder(
-                        requireContext(),
-                        loadedMapStyle
-                    ).build()
-                )
-
-                // Enable to make component visible
-                locationComponent?.isLocationComponentEnabled = true
-
-                // Set the component's camera mode
-                locationComponent?.cameraMode = CameraMode.TRACKING
-
-                // Set the component's render mode
-                locationComponent?.setRenderMode(RenderMode.COMPASS)
-            }
-        } else {
-            permissionsManager = PermissionsManager(this)
-            permissionsManager?.requestLocationPermissions(getAppActivity())
+            // Add or Update the Marker
+            updateLocationMarker(point)
         }
+
+        locationUpdatesHelper.startLocationUpdates()
+
+        // Initialize Annotation Manager for Markers
+        mapView?.annotations?.let {
+            annotationManager = it.createPointAnnotationManager()
+        }
+    }
+
+    private fun updateLocationMarker(point: Point) {
+        if (::annotationManager.isInitialized) {
+            if (locationMarker == null) {
+                val bitmap = getBitmapFromVectorDrawable(R.drawable.ic_location)
+
+                if (bitmap != null) {
+                    val annotationOptions = PointAnnotationOptions()
+                        .withPoint(point)
+                        .withIconImage(bitmap) // Use converted bitmap
+
+                    locationMarker = annotationManager.create(annotationOptions)
+                }
+            } else {
+                locationMarker?.point = point
+                annotationManager.update(locationMarker!!)
+            }
+        }
+    }
+
+    // Convert Vector Drawable to Bitmap
+    private fun getBitmapFromVectorDrawable(drawableId: Int): Bitmap? {
+        val drawable: Drawable = AppCompatResources.getDrawable(requireContext(), drawableId) ?: return null
+
+        val bitmap = Bitmap.createBitmap(
+            drawable.intrinsicWidth,
+            drawable.intrinsicHeight,
+            Bitmap.Config.ARGB_8888
+        )
+        val canvas = Canvas(bitmap)
+        drawable.setBounds(0, 0, canvas.width, canvas.height)
+        drawable.draw(canvas)
+
+        return bitmap
     }
 }

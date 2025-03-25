@@ -1,6 +1,6 @@
 package com.thesis.ispeed.dashboard
 
-import android.view.MenuItem
+
 import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
 import com.thesis.ispeed.R
@@ -9,6 +9,7 @@ import com.thesis.ispeed.app.shared.extension.showFancyToast
 import com.thesis.ispeed.app.shared.widget.DialogFactory
 import com.thesis.ispeed.app.shared.widget.DialogFactory.Companion.showCustomInfoDialog
 import com.thesis.ispeed.databinding.FragmentDashboardBinding
+import com.thesis.ispeed.login.presentation.LoginActivity
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -27,12 +28,20 @@ class DashboardFragment : BaseFragment<FragmentDashboardBinding>(bindingInflater
     private fun setupObserver() {
         with(viewModel) {
             userDetails.observe(viewLifecycleOwner) {
-                binding.toolBar.txtUserToolbar.text = "${it.firstName} ${it.lastName}"
+                it?.let {
+                    binding.toolBar.txtUserToolbar.text = "${it.firstName} ${it.lastName}"
+                }
             }
         }
     }
 
     private fun FragmentDashboardBinding.setupComponents() {
+        toolBar.txtLogout.setOnClickListener {
+            showFancyToast(message = "Successfully Logged out.")
+            viewModel.logoutUser()
+            navigationUtil.navigateActivity(getAppActivity(), LoginActivity::class.java, willFinish = true)
+        }
+
         cvSpeedTest.setOnClickListener {
             findNavController().navigate(directions = DashboardFragmentDirections.navigateToSpeedTestFragment())
         }
@@ -70,14 +79,5 @@ class DashboardFragment : BaseFragment<FragmentDashboardBinding>(bindingInflater
                 )
             )
         }
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == R.id.logout) {
-            viewModel.logoutUser()
-            showFancyToast(message = "Logging Out")
-        }
-        return false
     }
 }

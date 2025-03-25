@@ -14,6 +14,7 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.LocationSettingsRequest
 import com.google.android.gms.location.LocationSettingsStatusCodes
+import com.google.android.play.integrity.internal.c
 import com.karumi.dexter.Dexter
 import com.karumi.dexter.MultiplePermissionsReport
 import com.karumi.dexter.PermissionToken
@@ -23,6 +24,7 @@ import com.karumi.dexter.listener.PermissionRequest
 import com.karumi.dexter.listener.multi.MultiplePermissionsListener
 import com.karumi.dexter.listener.single.PermissionListener
 import com.shashank.sony.fancytoastlib.FancyToast
+import com.thesis.ispeed.dashboard.screens.automatic_track.AutomaticTrackFragment
 import java.text.DateFormat
 import java.text.ParseException
 import java.text.SimpleDateFormat
@@ -30,6 +32,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
+
 
 class ViewUtil @Inject constructor() {
 
@@ -42,18 +45,19 @@ class ViewUtil @Inject constructor() {
     }
 
     @SuppressLint("SimpleDateFormat")
-    fun getWeeklyDate(): Array<String?> {
+    fun getWeeklyDate(weekNumber: Int): Array<String?> {
         val format: DateFormat = SimpleDateFormat("MM/dd/yyyy")
         val calendar: Calendar = Calendar.getInstance()
         calendar.firstDayOfWeek = Calendar.MONDAY
         calendar.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
 
         val days = arrayOfNulls<String>(7)
+        calendar.set(Calendar.WEEK_OF_MONTH, weekNumber)
+
         for (i in 0..6) {
             days[i] = format.format(calendar.time)
-            calendar.add(Calendar.DAY_OF_MONTH, 1)
+            calendar.add(Calendar.DATE, 1)
         }
-
         return days
     }
 
@@ -74,6 +78,26 @@ class ViewUtil @Inject constructor() {
             timeFormatter.format(date)
         } catch (e: Exception) {
             SimpleDateFormat("MM/dd/yyyy", Locale.getDefault()).format(Date())
+        }
+    }
+
+    fun parseWeekDate(weekDate: String?): String {
+        return try {
+            // Get date from string
+            @SuppressLint("SimpleDateFormat") val dateFormatter =
+                SimpleDateFormat("MM/dd/yyyy")
+            var date: Date? = null
+            try {
+                date = weekDate?.let { dateFormatter.parse(it) }
+            } catch (e: ParseException) {
+                e.printStackTrace()
+            }
+
+            // Get time from date
+            @SuppressLint("SimpleDateFormat") val timeFormatter = SimpleDateFormat("MMM. dd, yyyy")
+            timeFormatter.format(date)
+        } catch (e: Exception) {
+            SimpleDateFormat("MMM. dd, yyyy", Locale.getDefault()).format(Date())
         }
     }
 

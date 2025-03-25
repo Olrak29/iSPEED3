@@ -16,170 +16,173 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <com.mapbox.mapboxsdk.maps.MapView
+    <com.mapbox.maps.MapView
         android:id="@+id/map_view"
         android:layout_width="match_parent"
         android:layout_height="0dp"
+        android:layout_marginBottom="-10dp"
+        app:layout_constraintBottom_toTopOf="@+id/guideline"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/toolBar" />
+
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/guideline"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="horizontal"
+        app:layout_constraintGuide_percent="0.6" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/myLocationButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:clickable="true"
+        app:backgroundTint="@color/midnight_blue"
+        app:layout_constraintBottom_toTopOf="@+id/cardView"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:srcCompat="@drawable/ic_baseline_my_location_24" />
+
+    <androidx.cardview.widget.CardView
+        android:id="@+id/cardView"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:cardBackgroundColor="@color/midnight_blue"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/toolBar"
-        app:mapbox_renderTextureMode="true">
+        app:layout_constraintTop_toBottomOf="@+id/map_view"
+        mapbox:layout_editor_absoluteX="1dp">
 
-        <androidx.constraintlayout.widget.ConstraintLayout
+        <ScrollView
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:layout_height="wrap_content">
 
-            <com.google.android.material.floatingactionbutton.FloatingActionButton
-                android:id="@+id/myLocationButton"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_margin="16dp"
-                android:clickable="true"
-                app:backgroundTint="@color/midnight_blue"
-                app:layout_constraintBottom_toTopOf="@+id/cardView"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:srcCompat="@drawable/ic_baseline_my_location_24" />
+                android:orientation="vertical"
+                android:paddingHorizontal="16dp">
 
-            <androidx.cardview.widget.CardView
-                android:id="@+id/cardView"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                app:cardBackgroundColor="@color/midnight_blue"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                mapbox:layout_editor_absoluteX="1dp">
-
-                <ScrollView
+                <TextView
+                    android:id="@+id/tv_userInternet"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:layout_marginTop="24dp"
+                    android:fontFamily="@font/poppinsmedium"
+                    android:text="User: "
+                    android:textColor="@color/white"
+                    android:textSize="15dp"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
 
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:paddingHorizontal="16dp"
-                        android:orientation="vertical">
+                <TextView
+                    android:id="@+id/tv_isp"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="@font/poppinsmedium"
+                    android:text="ISP: "
+                    android:textColor="@color/white"
+                    android:textSize="15dp"
+                    app:layout_constraintEnd_toEndOf="@+id/tv_userInternet"
+                    app:layout_constraintStart_toStartOf="@+id/tv_userInternet"
+                    app:layout_constraintTop_toBottomOf="@+id/tv_userInternet" />
 
-                        <TextView
-                            android:id="@+id/tv_userInternet"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginHorizontal="10dp"
-                            android:layout_marginTop="24dp"
-                            android:fontFamily="@font/poppinsmedium"
-                            android:text="User: "
-                            android:textColor="@color/white"
-                            android:textSize="15dp"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintTop_toTopOf="parent" />
+                <TextView
+                    android:id="@+id/tv_download"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="@font/poppinsmedium"
+                    android:text="Download: "
+                    android:textColor="@color/white"
+                    android:textSize="15dp"
+                    app:layout_constraintEnd_toEndOf="@+id/tv_isp"
+                    app:layout_constraintStart_toStartOf="@+id/tv_isp"
+                    app:layout_constraintTop_toBottomOf="@+id/tv_isp" />
 
-                        <TextView
-                            android:id="@+id/tv_isp"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginHorizontal="10dp"
-                            android:layout_marginTop="4dp"
-                            android:fontFamily="@font/poppinsmedium"
-                            android:text="ISP: "
-                            android:textColor="@color/white"
-                            android:textSize="15dp"
-                            app:layout_constraintEnd_toEndOf="@+id/tv_userInternet"
-                            app:layout_constraintStart_toStartOf="@+id/tv_userInternet"
-                            app:layout_constraintTop_toBottomOf="@+id/tv_userInternet" />
+                <TextView
+                    android:id="@+id/tv_upload"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="@font/poppinsmedium"
+                    android:text="Upload: "
+                    android:textColor="@color/white"
+                    android:textSize="15dp"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="@+id/tv_download"
+                    app:layout_constraintTop_toBottomOf="@+id/tv_download" />
 
-                        <TextView
-                            android:id="@+id/tv_download"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginHorizontal="10dp"
-                            android:layout_marginTop="4dp"
-                            android:fontFamily="@font/poppinsmedium"
-                            android:text="Download: "
-                            android:textColor="@color/white"
-                            android:textSize="15dp"
-                            app:layout_constraintEnd_toEndOf="@+id/tv_isp"
-                            app:layout_constraintStart_toStartOf="@+id/tv_isp"
-                            app:layout_constraintTop_toBottomOf="@+id/tv_isp" />
+                <TextView
+                    android:id="@+id/tv_ping"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:fontFamily="@font/poppinsmedium"
+                    android:text="Ping: "
+                    android:textColor="@color/white"
+                    android:textSize="15dp"
+                    app:layout_constraintEnd_toEndOf="@+id/tv_upload"
+                    app:layout_constraintStart_toStartOf="@+id/tv_upload"
+                    app:layout_constraintTop_toBottomOf="@+id/tv_upload" />
 
-                        <TextView
-                            android:id="@+id/tv_upload"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginHorizontal="10dp"
-                            android:layout_marginTop="4dp"
-                            android:fontFamily="@font/poppinsmedium"
-                            android:text="Upload: "
-                            android:textColor="@color/white"
-                            android:textSize="15dp"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintStart_toStartOf="@+id/tv_download"
-                            app:layout_constraintTop_toBottomOf="@+id/tv_download" />
+                <TextView
+                    android:id="@+id/tv_stablitiy"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="@font/poppinsmedium"
+                    android:text="Internet Stability: "
+                    android:textColor="@color/white"
+                    android:textSize="15dp"
+                    app:layout_constraintEnd_toEndOf="@+id/tv_ping"
+                    app:layout_constraintStart_toStartOf="@+id/tv_ping"
+                    app:layout_constraintTop_toBottomOf="@+id/tv_ping" />
 
-                        <TextView
-                            android:id="@+id/tv_ping"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginHorizontal="10dp"
-                            android:fontFamily="@font/poppinsmedium"
-                            android:text="Ping: "
-                            android:textColor="@color/white"
-                            android:textSize="15dp"
-                            app:layout_constraintEnd_toEndOf="@+id/tv_upload"
-                            app:layout_constraintStart_toStartOf="@+id/tv_upload"
-                            app:layout_constraintTop_toBottomOf="@+id/tv_upload" />
+                <TextView
+                    android:id="@+id/tv_timeRecorded"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="16dp"
+                    android:fontFamily="@font/poppinsmedium"
+                    android:text="Time Recorded: "
+                    android:textColor="@color/white"
+                    android:textSize="15dp"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="@+id/tv_stablitiy"
+                    app:layout_constraintStart_toStartOf="@+id/tv_stablitiy"
+                    app:layout_constraintTop_toBottomOf="@+id/tv_stablitiy" />
 
-                        <TextView
-                            android:id="@+id/tv_stablitiy"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginHorizontal="10dp"
-                            android:layout_marginTop="4dp"
-                            android:fontFamily="@font/poppinsmedium"
-                            android:text="Internet Stability: "
-                            android:textColor="@color/white"
-                            android:textSize="15dp"
-                            app:layout_constraintEnd_toEndOf="@+id/tv_ping"
-                            app:layout_constraintStart_toStartOf="@+id/tv_ping"
-                            app:layout_constraintTop_toBottomOf="@+id/tv_ping" />
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/btn_measureNow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:layout_marginBottom="16dp"
+                    android:background="@drawable/shape_button"
+                    android:backgroundTint="@color/white"
+                    android:fontFamily="@font/poppinsmedium"
+                    android:text="Measure"
+                    android:textAllCaps="false"
+                    android:textColor="@color/black"
+                    android:textSize="15dp"
+                    app:layout_constraintBottom_toTopOf="@+id/cardView"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintHorizontal_bias="0.498"
+                    app:layout_constraintStart_toStartOf="parent" />
+            </LinearLayout>
+        </ScrollView>
+    </androidx.cardview.widget.CardView>
 
-                        <TextView
-                            android:id="@+id/tv_timeRecorded"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginHorizontal="10dp"
-                            android:layout_marginTop="4dp"
-                            android:layout_marginBottom="16dp"
-                            android:fontFamily="@font/poppinsmedium"
-                            android:text="Time Recorded: "
-                            android:textColor="@color/white"
-                            android:textSize="15dp"
-                            app:layout_constraintBottom_toBottomOf="parent"
-                            app:layout_constraintEnd_toEndOf="@+id/tv_stablitiy"
-                            app:layout_constraintStart_toStartOf="@+id/tv_stablitiy"
-                            app:layout_constraintTop_toBottomOf="@+id/tv_stablitiy" />
-
-                        <androidx.appcompat.widget.AppCompatButton
-                            android:id="@+id/btn_measureNow"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="16dp"
-                            android:background="@drawable/shape_button"
-                            android:layout_marginHorizontal="10dp"
-                            android:backgroundTint="@color/white"
-                            android:fontFamily="@font/poppinsmedium"
-                            android:text="Measure"
-                            android:textColor="@color/black"
-                            android:textAllCaps="false"
-                            android:textSize="15dp"
-                            app:layout_constraintBottom_toTopOf="@+id/cardView"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintHorizontal_bias="0.498"
-                            app:layout_constraintStart_toStartOf="parent" />
-                    </LinearLayout>
-                </ScrollView>
-            </androidx.cardview.widget.CardView>
-        </androidx.constraintlayout.widget.ConstraintLayout>
-    </com.mapbox.mapboxsdk.maps.MapView>
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -28,4 +28,6 @@
     <color name="super_light_red">#F89078</color>
     <color name="super_light_blue">#6D9CCF</color>
     <color name="super_light_gray">#C4C4C4</color>
+    <color name="super_transparent_light_gray">#60C4C4C4</color>
+    <color name="qu_grey_600">#757575</color>
 </resources>

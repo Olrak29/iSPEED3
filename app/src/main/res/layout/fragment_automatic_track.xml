@@ -21,6 +21,7 @@
             android:paddingHorizontal="8dp"
             android:paddingTop="40dp"
             android:paddingBottom="24dp"
+            android:animateLayoutChanges="true"
             app:layout_constraintTop_toBottomOf="@+id/toolBar"
             tools:layout_editor_absoluteX="24dp">
 
@@ -40,7 +41,6 @@
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/poppinsmedium"
                 android:text="Name:"
-                android:layout_marginTop="8dp"
                 android:layout_marginStart="8dp"
                 android:textColor="@color/black"
                 android:textSize="18dp"
@@ -49,6 +49,7 @@
                 app:layout_constraintTop_toTopOf="parent" />
 
             <LinearLayout
+                android:id="@+id/linearLayout"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
@@ -79,6 +80,18 @@
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toTopOf="parent" />
             </LinearLayout>
+
+            <TextView
+                android:id="@+id/weekly_date"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/poppinsmedium"
+                android:textColor="@color/black"
+                android:textSize="14dp"
+                app:layout_constraintEnd_toEndOf="@+id/linearLayout"
+                app:layout_constraintStart_toStartOf="@+id/linearLayout"
+                app:layout_constraintTop_toBottomOf="@+id/linearLayout"
+                tools:text="Weekly Date" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <include
@@ -139,11 +152,43 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/selection_layout" >
 
-            <com.github.mikephil.charting.charts.BarChart
-                android:id="@+id/bar_chart"
+            <androidx.constraintlayout.widget.ConstraintLayout
                 android:layout_weight="3.5"
                 android:layout_width="wrap_content"
-                android:layout_height="230dp"/>
+                android:layout_height="wrap_content"
+                android:animateLayoutChanges="true">
+
+                <com.github.mikephil.charting.charts.BarChart
+                    android:id="@+id/bar_chart"
+                    android:layout_width="0dp"
+                    android:layout_height="230dp"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <de.hdodenhof.circleimageview.CircleImageView
+                    android:id="@+id/previous_week"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/icon_arrow_lefft_24px"
+                    android:layout_marginStart="4dp"
+                    app:civ_circle_background_color="@color/super_transparent_light_gray"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <de.hdodenhof.circleimageview.CircleImageView
+                    android:id="@+id/next_week"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_marginEnd="4dp"
+                    android:src="@drawable/icon_arrow_right_24px"
+                    app:civ_circle_background_color="@color/super_transparent_light_gray"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
             <LinearLayout
                 android:layout_marginStart="12dp"
@@ -226,7 +271,7 @@
             layout="@layout/share_activity_header"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="16dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/graph_layout" />
